@@ -1,0 +1,76 @@
+#!/bin/bash
+
+CURL="/usr/bin/curl"
+YT_DLP="yt-dlp"
+
+SERVICE="Instagram"
+ID_FIELD="id"
+TITLE_FIELD="title"
+TIMESTAMP_FIELD="timestamp"
+UPLOADER_FIELD="channel"
+
+download_video () {
+    local INFO_JSON=$("$YT_DLP" -j "$1" 2>/dev/null)
+    # Variable is empty
+    if [[ -z "${INFO_JSON}" ]]; then
+        echo "error: unable to get info for '$1'" >&2
+        return 1
+    fi
+    local ID=$(echo $INFO_JSON | jq -r ".$ID_FIELD")
+    if [[ -z "${ID}" ]]; then
+        echo "error: unable to get ID for '$1'" >&2
+        return 1
+    fi
+    local TITLE=$(echo $INFO_JSON | jq -r ".$TITLE_FIELD")
+    if [[ -z "${TITLE}" ]]; then
+        echo "error: unable to get title for '$1'" >&2
+        return 1
+    fi
+    local TIMESTAMP=$(echo $INFO_JSON | jq -r ".$TIMESTAMP_FIELD")
+    if [[ -z "${TIMESTAMP}" ]]; then
+        echo "error: unable to get timestamp for '$1'" >&2
+        return 1
+    fi
+    local UPLOADER=$(echo $INFO_JSON | jq -r ".$UPLOADER_FIELD")
+    if [[ -z "${UPLOADER}" ]]; then
+        echo "error: unable to get uploader for '$1'" >&2
+        return 1
+    fi
+
+    if [[ ! -d "/media/$SERVICE/@$UPLOADER" ]]; then
+        if ! mkdir -v -- "/media/$SERVICE/@$UPLOADER"; then
+            exit 1
+        fi
+    fi
+
+    cd "/media/$SERVICE/@$UPLOADER"
+
+    local DIRECTORY="$ID"
+
+    if [ ! -d "$DIRECTORY" ]; then
+        if ! mkdir -v -- "$DIRECTORY"; then
+            exit 1
+        fi
+        cd -- "$DIRECTORY"
+    else
+        echo "error: directory '$DIRECTORY' already exists" >&2
+        return 128
+    fi
+
+    "$YT_DLP" --newline --verbose --skip-download --write-description --write-info-json --write-thumbnail --convert-thumbnails png --keep-video --output "%(id)s.%(ext)s" "$1"
+
+    for format_id in $(echo "$INFO_JSON" | jq -r '.formats[].format_id'); do
+        "$YT_DLP" --newline --verbose --format "$format_id" --output "%(id)s.$format_id.%(ext)s" "$1"
+    done
+
+    if [[ "$PWD" = "/media/$SERVICE/@$UPLOADER/$DIRECTORY" ]]; then
+        touch -t "$(date -d @"$TIMESTAMP" +%Y%m%d%H%M.%S)" -- "$ID"*
+        touch -t "$(date -d @"$TIMESTAMP" +%Y%m%d%H%M.%S)" -- .
+    fi
+
+    return 0
+}
+
+for url in "$@"; do
+    download_video "$url"
+done

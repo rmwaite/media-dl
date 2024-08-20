@@ -1,0 +1,173 @@
+#!/bin/bash
+
+set -o pipefail
+
+logfile="/media/media-dl.log"
+
+log () {
+    timestamp="$(date "+%Y-%m-%dT%H:%M:%SZ")"
+    echo "$timestamp $1" >> "$logfile"
+    echo "$1"
+}
+
+export PUSHOVER_USER_KEY="$(<"$PUSHOVER_USER_KEY_FILE")"
+export PUSHOVER_APP_TOKEN="$(<"$PUSHOVER_APP_TOKEN_FILE")"
+
+send_pushover_message () {
+    curl --silent --form-string "user=$PUSHOVER_USER_KEY" --form-string "token=$PUSHOVER_APP_TOKEN" --form-string "message=$1" --form-string "device=$2" https://api.pushover.net/1/messages.json > /dev/null
+}
+
+get_url () {
+    url="$(curl -s http://app:80/)"
+    echo "$url"
+}
+get_contents () {
+    response="$(curl -s http://app:80/)"
+    echo "$response"
+}
+
+echo "Starting media download loop"
+while true; do
+    contents="$(get_contents)"
+    url=$(echo $contents | jq -r '.url')
+    device=$(echo $contents | jq -r '.device')
+    media_type=$(echo $contents | jq -r '.media_type')
+    playlist_name=$(echo $contents | jq -r '.playlist_name')
+
+    if [ -n "$url" ]; then
+        log "Received URL for processing: $url"
+        log "Device: $device"
+        log "Media Type: $media_type"
+        log "Playlist Name: $playlist_name"
+    fi
+
+    case "$url" in
+        "https://www.youtube.com/watch"*|"https://youtube.com/watch"*|"https://m.youtube.com/watch"*|"https://youtu.be/"*|"https://youtube.com/shorts/"*|"https://m.youtube.com/shorts/"*|"https://www.youtube.com/shorts/"*)
+            log "Downloading $url"
+            #echo "Downloading $url"
+            send_pushover_message "Downloading $url" "$device"
+            case "$media_type" in
+                "video")
+                    youtube-download "$url" 2>&1 | tee -a "$logfile"
+                    ;;
+                "audio")
+                    youtube-audio-download "$url" 2>&1 | tee -a "$logfile"
+                    ;;
+                "playlist")
+                    youtube-offline-playlist "$playlist_name" "$url" 2>&1 | tee -a "$logfile"
+                    ;;
+            esac
+            retval="$?"
+            if [ "$retval" -eq 0 ]; then
+                #echo -ne "\033]9;Success\007"
+                #send-imessage "+1 (440) 823-3785" "Success"
+                log "Success"
+                #echo "Success"
+                send_pushover_message "Success" "$device"
+            elif [ "$retval" -eq 128 ]; then
+                log "Destination directory already exists"
+                send_pushover_message "Destination directory already exists" "$device"
+            else
+                #echo -ne "\033]9;Failure: $retval\007"
+                #send-imessage "+1 (440) 823-3785" "Failure: $retval"
+                log "Failure: $retval"
+                #echo "Failure: $retval"
+                send_pushover_message "Failure: $retval" "$device"
+            fi
+            ;;
+        "https://www.tiktok.com/"*)
+            log "Downloading $url"
+            #echo "Downloading $url"
+            send_pushover_message "Downloading $url" "$device"
+            tiktok-dl "$url" 2>&1 | tee -a "$logfile"
+            retval="$?"
+            if [ "$retval" -eq 0 ]; then
+                #echo -ne "\033]9;Success\007"
+                #send-imessage "+1 (440) 823-3785" "Success"
+                log "Success"
+                #echo "Success"
+                send_pushover_message "Success" "$device"
+            elif [ "$retval" -eq 128 ]; then
+                log "Destination directory already exists"
+                send_pushover_message "Destination directory already exists" "$device"
+            else
+                #echo -ne "\033]9;Failure: $retval\007"
+                #send-imessage "+1 (440) 823-3785" "Failure: $retval"
+                log "Failure: $retval"
+                #echo "Failure: $retval"
+                send_pushover_message "Failure: $retval" "$device"
+            fi
+            ;;
+        "https://www.instagram.com/"*)
+            log "Downloading $url"
+            #echo "Downloading $url"
+            send_pushover_message "Downloading $url" "$device"
+            instagram-dl "$url" 2>&1 | tee -a "$logfile"
+            retval="$?"
+            if [ "$retval" -eq 0 ]; then
+                #echo -ne "\033]9;Success\007"
+                #send-imessage "+1 (440) 823-3785" "Success"
+                log "Success"
+                #echo "Success"
+                send_pushover_message "Success" "$device"
+            elif [ "$retval" -eq 128 ]; then
+                log "Destination directory already exists"
+                send_pushover_message "Destination directory already exists" "$device"
+            else
+                #echo -ne "\033]9;Failure: $retval\007"
+                #send-imessage "+1 (440) 823-3785" "Failure: $retval"
+                log "Failure: $retval"
+                #echo "Failure: $retval"
+                send_pushover_message "Failure: $retval" "$device"
+            fi
+            ;;
+        "https://twitter.com/"*"/status/"*|"https://x.com/"*"/status/"*)
+            log "Downloading $url"
+            #echo "Downloading $url"
+            send_pushover_message "Downloading $url" "$device"
+            twitter-dl "$url" 2>&1 | tee -a "$logfile"
+            retval="$?"
+            if [ "$retval" -eq 0 ]; then
+                #echo -ne "\033]9;Success\007"
+                #send-imessage "+1 (440) 823-3785" "Success"
+                log "Success"
+                #echo "Success"
+                send_pushover_message "Success" "$device"
+            elif [ "$retval" -eq 128 ]; then
+                log "Destination directory already exists"
+                send_pushover_message "Destination directory already exists" "$device"
+            else
+                #echo -ne "\033]9;Failure: $retval\007"
+                #send-imessage "+1 (440) 823-3785" "Failure: $retval"
+                log "Failure: $retval"
+                #echo "Failure: $retval"
+                send_pushover_message "Failure: $retval" "$device"
+            fi
+            ;;
+        "https://soundcloud.com/"*)
+            log "Downloading $url"
+            #echo "Downloading $url"
+            send_pushover_message "Downloading $url" "$device"
+            soundcloud-download "$url" 2>&1 | tee -a "$logfile"
+            retval="$?"
+            if [ "$retval" -eq 0 ]; then
+                #echo -ne "\033]9;Success\007"
+                #send-imessage "+1 (440) 823-3785" "Success"
+                log "Success"
+                #echo "Success"
+                send_pushover_message "Success" "$device"
+            elif [ "$retval" -eq 128 ]; then
+                log "Destination directory already exists"
+                send_pushover_message "Destination directory already exists" "$device"
+            else
+                #echo -ne "\033]9;Failure: $retval\007"
+                #send-imessage "+1 (440) 823-3785" "Failure: $retval"
+                log "Failure: $retval"
+                #echo "Failure: $retval"
+                send_pushover_message "Failure: $retval" "$device"
+            fi
+            ;;
+
+    esac
+    sleep 1
+done

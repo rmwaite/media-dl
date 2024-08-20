@@ -1,0 +1,45 @@
+services:
+  redis:
+    image: redis:latest
+    container_name: redis
+    restart: always
+    command: redis-server --save 60 1 --loglevel verbose
+    volumes:
+      - redis_data:/data
+
+  app:
+    build: ./app
+    container_name: app
+    restart: always
+    ports:
+      - 8081:80
+    volumes:
+      - ./app:/app
+    depends_on:
+      - redis
+
+  worker:
+    build: ./worker
+    container_name: worker
+    restart: always
+    volumes:
+      - /Users/Richard/Downloads/Social:/media
+      - /Users/Richard/Library/Application Support/Firefox:/root/.mozilla/firefox
+    depends_on:
+      - app
+    environment:
+      PUSHOVER_USER_KEY_FILE: /run/secrets/pushover_user_key
+      PUSHOVER_APP_TOKEN_FILE: /run/secrets/pushover_app_token
+    secrets:
+      - pushover_user_key
+      - pushover_app_token
+
+secrets:
+  pushover_user_key:
+    file: pushover_user_key.txt
+  pushover_app_token:
+    file: pushover_app_token.txt
+
+volumes:
+  redis_data:
+

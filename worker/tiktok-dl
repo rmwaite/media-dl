@@ -1,0 +1,96 @@
+#!/bin/bash
+
+download_tiktok_video () {
+    local INFO_JSON=$(yt-dlp -j "$1" 2>/dev/null)
+    # Variable is empty
+    if [[ -z "${INFO_JSON}" ]]; then
+        echo "error: unable to get info for '$1'" >&2
+        echo "running 'yt-dlp -F $1'"
+        yt-dlp -F "$1"
+        return 1
+    fi
+    local ID=$(echo $INFO_JSON | jq -r .id)
+    if [[ -z "${ID}" ]]; then
+        echo "error: unable to get ID for '$1'" >&2
+        return 1
+    fi
+    local TITLE=$(echo $INFO_JSON | jq -r .title)
+    if [[ -z "${TITLE}" ]]; then
+        echo "error: unable to get title for '$1'" >&2
+        return 1
+    fi
+    local TIMESTAMP=$(echo $INFO_JSON | jq -r .timestamp)
+    if [[ -z "${TIMESTAMP}" ]]; then
+        echo "error: unable to get timestamp for '$1'" >&2
+        return 1
+    fi
+    local UPLOADER=$(echo $INFO_JSON | jq -r .uploader)
+    if [[ -z "${UPLOADER}" ]]; then
+        echo "error: unable to get uploader for '$1'" >&2
+        return 1
+    fi
+
+    if [[ ! -d "/media/TikTok/@$UPLOADER" ]]; then
+        if ! mkdir -v "/media/TikTok/@$UPLOADER"; then
+            exit 1
+        fi
+    fi
+
+    cd "/media/TikTok/@$UPLOADER"
+
+    local DIRECTORY="$ID"
+
+    if [ ! -d "$DIRECTORY" ]; then
+        if ! mkdir -v "$DIRECTORY"; then
+            exit 1
+        fi
+        cd "$DIRECTORY"
+    else
+        echo "error: directory '$DIRECTORY' already exists" >&2
+        return 128
+    fi
+
+    if [ ! -d "pages" ]; then
+        mkdir -v -- "pages" || exit 1
+        cd "pages" || exit 1
+        yt-dlp --newline --verbose --skip-download --write-pages "$1"
+        cd "/media/TikTok/@$UPLOADER/$DIRECTORY" || exit 1
+    fi
+
+    for page in "pages/$ID_"*.dump; do
+        if grep -q image_post_info "$page"; then
+            for format in display_image owner_watermark_image user_watermark_image thumbnail; do
+                jq -r ".aweme_list[0].image_post_info.images[].$format.url_list[1]" "$page" | while read -r url; do
+                    curl --remote-header-name --remote-name --remote-time "$url"
+                done
+            done
+            yt-dlp --newline --verbose --write-description --write-info-json --write-thumbnail --convert-thumbnails png --keep-video --format play_addr --output "%(id)s.%(ext)s" "$1"
+            if [[ "$PWD" = "/media/TikTok/@$UPLOADER/$DIRECTORY" ]]; then
+                touch -t "$(date -d "@$TIMESTAMP" +%Y%m%d%H%M.%S)" ./*photomode*
+                touch -t "$(date -d "@$TIMESTAMP" +%Y%m%d%H%M.%S)" ./"$ID"*
+                touch -t "$(date -d "@$TIMESTAMP" +%Y%m%d%H%M.%S)" .
+            fi
+            return 0
+        fi
+    done
+
+    yt-dlp --newline --verbose --write-description --write-info-json --write-thumbnail --convert-thumbnails png --output "%(id)s.%(ext)s" "$1"
+    yt-dlp --newline --verbose --format download/download_addr-0/download_addr-1/download_addr-2 --output "%(id)s.watermarked.%(ext)s" "$1"
+
+    #/Users/Richard/yt-dlp-venv/bin/yt-dlp --embed-metadata --embed-thumbnail "$1"
+    #/Users/Richard/yt-dlp-venv/bin/yt-dlp --output "%(id)s.%(ext)s" "$1"
+
+    #/Users/Richard/yt-dlp-venv/bin/yt-dlp --embed-metadata --embed-thumbnail --format download_addr-0 --output "%(title)s (watermarked) [%(id)s].%(ext)s" "$1"
+    #/Users/Richard/yt-dlp-venv/bin/yt-dlp --format download_addr-0 --output "%(id)s.watermarked.%(ext)s" "$1"
+
+    if [[ "$PWD" = "/media/TikTok/@$UPLOADER/$DIRECTORY" ]]; then
+        touch -t "$(date -d @"$TIMESTAMP" +%Y%m%d%H%M.%S)" ./"$ID"*
+        touch -t "$(date -d @"$TIMESTAMP" +%Y%m%d%H%M.%S)" .
+    fi
+
+    return 0
+}
+
+for url in "$@"; do
+    download_tiktok_video "$url"
+done

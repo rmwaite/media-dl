@@ -1,0 +1,32 @@
+#!/bin/bash
+
+CURL="/usr/bin/curl"
+YT_DLP="yt-dlp"
+
+SERVICE="YouTube"
+ID_FIELD="id"
+TITLE_FIELD="title"
+YT_DLP_FORMAT="bestaudio[ext=m4a]"
+
+download_audio () {
+    local INFO_JSON=$("$YT_DLP" -j "$2" 2>/dev/null)
+    # Variable is empty
+    if [[ -z "${INFO_JSON}" ]]; then
+        echo "error: unable to get info for '$1'" >&2
+        return 1
+    fi
+
+    if [[ ! -d "/media/$SERVICE/playlists/$1" ]]; then
+        if ! mkdir -v -- "/media/$SERVICE/playlists/$1"; then
+            exit 1
+        fi
+    fi
+
+    cd -- "/media/$SERVICE/playlists/$1"
+
+    "$YT_DLP" --newline --verbose --format "$YT_DLP_FORMAT" --embed-thumbnail --embed-metadata --parse-metadata "%(upload_date>%Y)s:%(meta_date)s" --parse-metadata "uploader:%(meta_artist)s" --postprocessor-args "-metadata album='""$1""'" --output "%(title)s.%(ext)s" "$2"
+
+    return 0
+}
+
+download_audio "$@"

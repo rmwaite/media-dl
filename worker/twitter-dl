@@ -1,0 +1,101 @@
+#!/bin/bash
+
+CURL="/usr/bin/curl"
+YT_DLP="yt-dlp"
+
+SERVICE="Twitter"
+ID_FIELD="id"
+TITLE_FIELD="title"
+TIMESTAMP_FIELD="timestamp"
+UPLOADER_FIELD="uploader_id"
+
+download_video () {
+    temp_dir="$(mktemp -d -t twitter_dl.XXXXXX)"
+    temp_info_json_base="$(mktemp -t info_json.XXXXXX -p "$temp_dir" -u)"
+    temp_info_json="$temp_info_json_base.info.json"
+
+    if ! cd "$temp_dir"; then
+        echo "error: cd '$temp_dir' failed" >&2
+        return 1
+    fi
+    "$YT_DLP" --skip-download --write-info-json --write-pages --output "infojson:$temp_info_json_base" --newline --verbose "$1"
+    # File exists and is not empty
+    if [[ ! -s "$temp_info_json" ]]; then
+        echo "error: unable to get info for '$1'" >&2
+        return 1
+    fi
+    local ID=$(jq -r ".$ID_FIELD" "$temp_info_json")
+    if [[ -z "${ID}" ]]; then
+        echo "error: unable to get ID for '$1'" >&2
+        return 1
+    fi
+    local TITLE=$(jq -r ".$TITLE_FIELD" "$temp_info_json")
+    if [[ -z "${TITLE}" ]]; then
+        echo "error: unable to get title for '$1'" >&2
+        return 1
+    fi
+    local TIMESTAMP=$(jq -r ".$TIMESTAMP_FIELD" "$temp_info_json")
+    if [[ -z "${TIMESTAMP}" ]]; then
+        echo "error: unable to get timestamp for '$1'" >&2
+        return 1
+    else
+        TIMESTAMP="${TIMESTAMP##*.}"
+    fi
+    local UPLOADER=$(jq -r ".$UPLOADER_FIELD" "$temp_info_json")
+    if [[ -z "${UPLOADER}" ]]; then
+        echo "error: unable to get uploader for '$1'" >&2
+        return 1
+    fi
+
+    if [[ ! -d "/media/$SERVICE/@$UPLOADER" ]]; then
+        if ! mkdir -v "/media/$SERVICE/@$UPLOADER"; then
+            exit 1
+        fi
+    fi
+
+    cd "/media/$SERVICE/@$UPLOADER"
+
+    local DIRECTORY="$ID"
+
+    if [ ! -d "$DIRECTORY" ]; then
+        if ! mkdir -v "$DIRECTORY"; then
+            exit 1
+        fi
+        cd "$DIRECTORY"
+    else
+        echo "error: directory '$DIRECTORY' already exists" >&2
+        return 128
+    fi
+
+    if [ ! -d "pages" ]; then
+        mkdir -v -- "pages" || exit 1
+        mv -nv "$temp_dir/"*".dump" "./pages/"
+    fi
+
+
+    "$YT_DLP" --newline --verbose --skip-download --list-thumbnails --list-formats --load-info-json "$temp_info_json"
+
+    "$YT_DLP" --newline --verbose --skip-download --write-description --write-info-json --write-thumbnail --convert-thumbnails png --keep-video --output "%(id)s.%(ext)s" --load-info-json "$temp_info_json"
+
+    for format_id in $(jq -r '.formats[].format_id' "$temp_info_json"); do
+        "$YT_DLP" --newline --verbose --format "$format_id" --output "%(id)s.$format_id.%(ext)s" --load-info-json "$temp_info_json"
+    done
+
+    if [[ "$PWD" = "/media/$SERVICE/@$UPLOADER/$DIRECTORY" ]]; then
+        touch -t "$(date -d @"$TIMESTAMP" +%Y%m%d%H%M.%S)" "$ID"*
+        touch -t "$(date -d @"$TIMESTAMP" +%Y%m%d%H%M.%S)" .
+    fi
+
+    # Remove temporary directory
+    echo "removing temporary directory '$temp_dir'"
+    if ! rm -r "$temp_dir"; then
+        echo "error: removal of temporary directory '$temp_dir' failed" >&2
+        exit 1
+    fi
+
+    return 0
+}
+
+for url in "$@"; do
+    download_video "$url"
+done
