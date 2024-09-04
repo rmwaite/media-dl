@@ -13,5 +13,6 @@ COPY ./youtube-download /usr/local/bin/
 COPY ./youtube-audio-download /usr/local/bin/
 COPY ./vine-dl /usr/local/bin/
 COPY ./youtube-offline-playlist /usr/local/bin/
+COPY ./send-pushover-message /usr/local/bin/
 
 ENTRYPOINT [ "bash", "/usr/local/bin/media-dl-loop" ]
