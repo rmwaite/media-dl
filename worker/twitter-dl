@@ -39,7 +39,7 @@ download_video () {
         echo "error: unable to get timestamp for '$1'" >&2
         return 1
     else
-        TIMESTAMP="${TIMESTAMP##*.}"
+        TIMESTAMP="${TIMESTAMP%%.*}"
     fi
     local UPLOADER=$(jq -r ".$UPLOADER_FIELD" "$temp_info_json")
     if [[ -z "${UPLOADER}" ]]; then
